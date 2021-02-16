@@ -59,3 +59,9 @@ Stops fishing.
 ```
 
 Goes to the closest chest and stores the items fished.
+
+## Images
+
+![fishing](https://i.imgur.com/aHArRgO.png)
+
+![storing](https://i.imgur.com/DLDErYJ.png)
