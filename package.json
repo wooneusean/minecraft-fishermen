@@ -1,0 +1,25 @@
+{
+  "name": "fisherman",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "john": "nodemon ./src/fisherman.js !john 202.184.72.203 25565 \"Fisherman John\"",
+    "joe": "nodemon ./src/fisherman.js !joe 202.184.72.203 25565 \"Fisherman Joe\"",
+    "smith": "nodemon ./src/fisherman.js !smith 202.184.72.203 25565 \"Fisherman Smith\"",
+    "whoon": "nodemon ./src/fisherman.js !whoon 202.184.72.203 25565 \"whoon\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "mineflayer": "^3.0.0",
+    "mineflayer-pathfinder": "^1.5.0",
+    "nodemon": "^2.0.7",
+    "prismarine-entity": "^1.1.0",
+    "prismarine-viewer": "^1.13.3"
+  },
+  "devDependencies": {
+    "eslint": "^7.20.0"
+  }
+}
