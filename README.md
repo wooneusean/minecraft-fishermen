@@ -35,7 +35,7 @@ To start the bot, the bot must be run with these arguments:
 ### goto
 
 ```
-`<prefix> goto <player>|<x y z>`
+<prefix> goto <player>|<x y z>
 ```
 
 `<player>` can be a player name or `me` if you want the bot to go to you.
@@ -43,7 +43,7 @@ To start the bot, the bot must be run with these arguments:
 ### start
 
 ```
-`<prefix> start
+<prefix> start
 ```
 
 Goes to the closest body of water and starts fishing.
@@ -51,7 +51,7 @@ Goes to the closest body of water and starts fishing.
 ### stop
 
 ```
-`<prefix> stop
+<prefix> stop
 ```
 
 Stops fishing.
@@ -59,7 +59,13 @@ Stops fishing.
 ### store
 
 ```
-`<prefix> store
+<prefix> store
 ```
 
 Goes to the closest chest and stores the items fished.
+
+## Images
+
+![fishing](https://i.imgur.com/aHArRgO.png)
+
+![storing](https://i.imgur.com/DLDErYJ.png)
