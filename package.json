@@ -7,7 +7,7 @@
     "john": "nodemon ./src/fisherman.js !john 202.184.72.203 25565 \"Fisherman John\"",
     "joe": "nodemon ./src/fisherman.js !joe 202.184.72.203 25565 \"Fisherman Joe\"",
     "smith": "nodemon ./src/fisherman.js !smith 202.184.72.203 25565 \"Fisherman Smith\"",
-    "whoon": "nodemon ./src/fisherman.js !whoon 202.184.72.203 25565 \"whoon\""
+    "khor": "nodemon ./src/fisherman.js !khor 202.184.72.203 25565 \"Fisherman Khor\""
   },
   "keywords": [],
   "author": "",

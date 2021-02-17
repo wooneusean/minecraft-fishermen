@@ -8,13 +8,13 @@ Minecraft fishing bot made using [Mineflayer](https://github.com/PrismarineJS/mi
 2. Send chat message on what it caught
 3. Store items in a nearby chest
 4. Sleep when it is night (Only if there are unoccupied beds)
-5. Go to you, or a (x, y, z) coordinate
+5. Go to you, or an (x, y, z) coordinate
 
 ## How to use
 
 To start the bot, the bot must be run with these arguments:
 
-`node fisherman.js <prefix> <host> <port> [<name>] [<password>]`
+`node fisherman.js <prefix> <host> <port> <name> [<password>] [<viewer>] [<viewer_port>]`
 
 `prefix`: the prefix to call your bot.
 
@@ -25,6 +25,10 @@ To start the bot, the bot must be run with these arguments:
 `name`: username to log in to minecraft (can be anything if joining an offline-mode server)
 
 `password`(optional): optional if joining a offline-mode server. Password to the minecraft account.
+
+`viewer`(optional): `true` if you want to have a viewer for your bot. Provides a right-click move functionality to your bot.
+
+`viewer_port`(optional): Port for the viewer. Defaults to 3000.
 
 ## Commands
 

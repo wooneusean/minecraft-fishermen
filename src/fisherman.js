@@ -1,45 +1,60 @@
-if (process.argv.length < 5 || process.argv.length > 7) {
-  console.log('Usage : node fisherman.js <prefix> <host> <port> [<name>] [<password>]');
+if (process.argv.length < 6 || process.argv.length > 7) {
+  console.log('Usage : node fisherman.js <prefix> <host> <port> <username> [<viewer_port>]');
   process.exit(1);
 }
+
+const DEBUG = true;
+
+const [_, __, botPrefix, host, port, username, viewer_port] = process.argv;
+
+const globalPrefix = '!all';
 
 /**
  * Mineflayer declarations
  */
 const mineflayer = require('mineflayer');
-const mineflayerViewer = require('prismarine-viewer').mineflayer;
 const { pathfinder, Movements } = require('mineflayer-pathfinder');
 const { GoalBlock, GoalNear, GoalFollow } = require('mineflayer-pathfinder').goals;
 
+// #region UTILITY DECLARATIONS
 /**
- * Utility declarations
+ * UTILITY DECLARATIONS START
  */
-const getArguments = require('./utils/getArgs');
+const getArguments = (command, username, prefix) => {
+  const args = command.substr(prefix.length).match(/(".*?"|[^"\s]+)(?=\s*|\s*$)/g);
 
-const prefix = process.argv[2];
+  if (!args) throw new Error('Empty arguments');
+
+  const returnVal = { keyword: args[0], info: { commander: username, args: args.slice(1) } };
+
+  return returnVal;
+};
+/**
+ * UTILITY DECLARATIONS END
+ */
+//#endregion
 
 const fisherman = mineflayer.createBot({
-  host: process.argv[3],
-  port: parseInt(process.argv[4]),
-  username: process.argv[5] ? process.argv[5] : 'Fisherman',
-  password: process.argv[6],
+  host,
+  port: parseInt(port),
+  username,
 });
 
 const fishermanState = {
   isFishing: false,
   isStoring: false,
   isMoving: false,
+  isUsingViewer: viewer_port ? true : false,
   shouldFish: false,
 };
 
 fisherman.loadPlugin(pathfinder);
 
-// mineflayerViewer(botRef, { port: 3000 });
-
 fisherman.once('spawn', () => {
   const mcData = require('minecraft-data')(fisherman.version);
   const defaultMove = new Movements(fisherman, mcData);
 
+  // #region LOOPS
   /**
    * LOOPS START
    */
@@ -61,7 +76,7 @@ fisherman.once('spawn', () => {
     'red_bed',
     'black_bed',
   ];
-  const shouldSleepLoop = async () => {
+  const goToSleep = async () => {
     if (!fisherman.time.isDay && !fisherman.isSleeping) {
       const bedBlocks = fisherman.findBlocks({
         matching: bedTypes.map((bedName) => mcData.blocksByName[bedName].id),
@@ -71,7 +86,7 @@ fisherman.once('spawn', () => {
       let i = 0;
       let bedBlock = null;
 
-      const goToBed = () => {
+      const goToBed = async () => {
         if (i > bedBlocks.length - 1) {
           fisherman.chat("I can't find a suitable bed!");
           return;
@@ -85,15 +100,16 @@ fisherman.once('spawn', () => {
       const handleGoToBed = async () => {
         try {
           await fisherman.sleep(bedBlock);
-          await stopFishing(true);
+          fisherman.isSleeping = true;
+          fisherman.chat("It's night! I'm going to sleep!");
           fisherman.on('wake', afterAwakeHandler);
         } catch (error) {
           console.log(error.message);
           i++;
           goToBed();
+        } finally {
+          fisherman.removeListener('goal_reached', handleGoToBed);
         }
-
-        fisherman.removeListener('goal_reached', handleGoToBed);
       };
 
       goToBed();
@@ -101,49 +117,61 @@ fisherman.once('spawn', () => {
   };
 
   setInterval(() => {
-    shouldSleepLoop();
+    goToSleep();
   }, 5000);
-
   /**
    * LOOPS END
    */
+  // #endregion
 
+  // #region LISTENER HANDLERS
   /**
    * LISTENER HANDLERS START
    */
-
   const afterAwakeHandler = () => {
+    fisherman.removeListener('wake', afterAwakeHandler);
+
+    fisherman.chat('Rise and shine! Time to go fishing!');
+
     if (fishermanState.shouldFish) {
       startFishing();
     }
-    fisherman.removeListener('wake', afterAwakeHandler);
   };
 
   const reachedHandler = () => {
-    fisherman.chat("I'm here!");
     fisherman.removeListener('goal_reached', reachedHandler);
+
+    fisherman.chat("I'm here!");
   };
 
   const onCollectHandler = (player, entity) => {
     if (entity.kind === 'Drops' && player === fisherman.entity) {
-      if (fishermanState.isFishing === false) {
-        const { itemId } = entity.metadata[entity.metadata.length - 1];
-        fisherman.chat(`I caught a ${mcData.items[itemId].displayName}!`);
+      if (DEBUG) {
+        console.log({ method: 'onCollectHandler', state: fishermanState });
+      }
+
+      if (!fishermanState.isFishing) {
         fisherman.removeListener('playerCollect', onCollectHandler);
+
+        const { itemId } = entity.metadata[entity.metadata.length - 1];
+
+        fisherman.chat(`I caught a ${mcData.items[itemId].displayName}!`);
         startFishing();
       }
     }
   };
 
   const reachedWaterHandler = () => {
-    fisherman.chat('Reached my spot!');
     fisherman.removeListener('goal_reached', reachedWaterHandler);
-  };
 
+    fisherman.chat('Reached my spot!');
+  };
   /**
    * LISTENER HANDLERS END
    */
+  // #endregion
 
+  // #region HELPER COMMANDS
   /**
    * HELPER COMMANDS START
    */
@@ -156,6 +184,10 @@ fisherman.once('spawn', () => {
 
     if (fisherman.isSleeping) {
       await fisherman.wake();
+    }
+
+    if (fishermanState.isFishing) {
+      await stopFishing();
     }
 
     fisherman.pathfinder.setMovements(defaultMove);
@@ -175,21 +207,28 @@ fisherman.once('spawn', () => {
   /**
    * HELPER COMMANDS END
    */
+  // #endregion
 
+  // #region ASYNC COMMANDS
   /**
    * ASYNC COMMANDS START
    */
-
   const startFishing = async () => {
-    if (fishermanState.isFishing === false) {
+    if (DEBUG) {
+      console.log({ method: 'startFishing', state: fishermanState });
+    }
+
+    if (!fishermanState.isFishing) {
       const { waterBlock, groundBlock } = await getFishingSpot();
 
-      moveToGoal(groundBlock.position, 'near');
+      if (!waterBlock || !groundBlock) return;
+
+      moveToGoal(groundBlock.position.offset(0.5, 1, 0.5));
 
       const sf_afterReach = async () => {
         fisherman.removeListener('goal_reached', sf_afterReach);
 
-        await fisherman.lookAt(waterBlock.position.offset(0, 1, 0), true);
+        await fisherman.lookAt(waterBlock.position.offset(0.5, 1, 0.5), true);
 
         try {
           await fisherman.equip(mcData.itemsByName.fishing_rod.id, 'hand');
@@ -198,16 +237,27 @@ fisherman.once('spawn', () => {
           return;
         }
 
-        fisherman.on('playerCollect', onCollectHandler);
+        fishermanState.shouldFish = true;
+        fishermanState.isFishing = true;
+        fisherman
+          .fish()
+          .then(() => {
+            fishermanState.isFishing = false;
+            fisherman.on('playerCollect', onCollectHandler);
 
-        try {
-          fishermanState.shouldFish = true;
-          fishermanState.isFishing = true;
-          await fisherman.fish();
-          fishermanState.isFishing = false;
-        } catch (error) {
-          console.log('Fishing cancelled');
-        }
+            if (DEBUG) {
+              console.log('playerCollectListener');
+            }
+          })
+          .catch(() => {
+            fisherman.removeListener('playerCollect', onCollectHandler);
+
+            if (DEBUG) {
+              console.log('Removed playerCollectListener');
+            }
+
+            console.log('Fishing cancelled');
+          });
       };
 
       fisherman.on('goal_reached', sf_afterReach);
@@ -215,16 +265,26 @@ fisherman.once('spawn', () => {
   };
 
   const stopFishing = async (shouldContinue = false) => {
-    if (fishermanState.isFishing === true) {
-      fisherman.removeListener('playerCollect', onCollectHandler);
+    if (DEBUG) {
+      console.log({ method: 'stopFishing', state: fishermanState });
+    }
+
+    fisherman.removeListener('playerCollect', onCollectHandler);
+
+    if (fishermanState.isFishing) {
       fisherman.activateItem();
       fishermanState.shouldFish = shouldContinue;
       fishermanState.isFishing = false;
       fisherman.chat('Stopped fishing!');
     }
+    return;
   };
 
   const storeCatches = async () => {
+    if (DEBUG) {
+      console.log({ method: 'storeCatches', state: fishermanState });
+    }
+
     const listOfTransferrableItems = [];
     for (const item of fisherman.inventory.items()) {
       if (item.type !== 684) {
@@ -237,7 +297,7 @@ fisherman.once('spawn', () => {
       return;
     }
 
-    await stopFishing();
+    await stopFishing(true);
 
     const chestToOpen = fisherman.findBlock({
       matching: mcData.blocksByName['chest'].id,
@@ -271,7 +331,7 @@ fisherman.once('spawn', () => {
 
       fisherman.chat(`Stored ${totalItemsStored} item(s)!`);
 
-      await chest.close();
+      chest.close();
 
       if (fishermanState.shouldFish) {
         startFishing();
@@ -284,7 +344,9 @@ fisherman.once('spawn', () => {
   const goNearWater = async () => {
     const { groundBlock } = await getFishingSpot();
 
-    moveToGoal(groundBlock.position.offset(0.5, 1, 0.5), 'near');
+    if (!groundBlock) return;
+
+    moveToGoal(groundBlock.position.offset(0.5, 1, 0.5));
 
     fisherman.once('goal_reached', reachedWaterHandler);
   };
@@ -292,13 +354,32 @@ fisherman.once('spawn', () => {
   const getFishingSpot = async () => {
     const waterBlock = fisherman.findBlock({
       matching: ['water'].map((name) => mcData.blocksByName[name].id),
-      useExtraInfo: (block) => fisherman.blockAt(block.position.offset(0, 1, 0)).type === mcData.blocksByName['air'].id,
+      useExtraInfo: (block) => {
+        return (
+          fisherman.blockAt(block.position.offset(0, 1, 0)).type === mcData.blocksByName['air'].id &&
+          [
+            [-1, 1],
+            [0, 1],
+            [1, 1],
+            [-1, 0],
+            [1, 0],
+            [-1, -1],
+            [0, -1],
+            [1, -1],
+          ].reduce((prev, curr, ix) => {
+            const blockType = fisherman.blockAt(block.position.offset(curr[0], 1, curr[1])).type;
+            return (
+              prev || (blockType !== mcData.blocksByName['air'].id && blockType !== mcData.blocksByName['water'].id)
+            );
+          }, false)
+        );
+      },
       maxDistance: 32,
     });
 
     if (!waterBlock) {
       fisherman.chat('No water found nearby!');
-      return;
+      return { waterBlock: null, groundBlock: null };
     }
 
     const groundBlock = fisherman.findBlock({
@@ -307,24 +388,31 @@ fisherman.once('spawn', () => {
       },
       useExtraInfo: (block) =>
         block.position.distanceTo(waterBlock.position) <= 1 &&
+        block.type !== mcData.blocksByName['air'].id &&
         fisherman.blockAt(block.position.offset(0, 1, 0)).type === mcData.blocksByName['air'].id,
-      maxDistance: 32,
+      maxDistance: 16,
     });
 
     if (!groundBlock) {
       fisherman.chat('No place to stand!');
-      return;
+      return { waterBlock: null, groundBlock: null };
     }
 
     return { waterBlock, groundBlock };
   };
-
   /**
    * ASYNC COMMANDS END
    */
+  // #endregion
 
   fisherman.on('chat', function (username, message) {
-    if (!message.startsWith(prefix) || username === fisherman.username) return;
+    if ((!message.startsWith(botPrefix) && !message.startsWith(globalPrefix)) || username === fisherman.username)
+      return;
+
+    let prefix = botPrefix;
+    if (message.startsWith(globalPrefix)) {
+      prefix = globalPrefix;
+    }
 
     let command;
     try {
@@ -344,6 +432,9 @@ fisherman.once('spawn', () => {
         break;
       case 'stop':
         stopFishing();
+        break;
+      case 'sleep':
+        goToSleep();
         break;
       case 'nearwater':
         goNearWater();
@@ -367,15 +458,11 @@ fisherman.once('spawn', () => {
 
           const { x, y, z } = target.position;
 
-          stopFishing();
-
           fisherman.chat(`Im going to ${target.username}!`);
 
           moveToGoal({ x, y, z }, 'near');
         } else if (args.length === 3) {
           const [x, y, z] = args;
-
-          stopFishing();
 
           fisherman.chat(`Im going to ${x}, ${y}, ${z}!`);
 
@@ -398,5 +485,30 @@ fisherman.once('spawn', () => {
     const nodesPerTick = ((r.visitedNodes * 50) / r.time).toFixed(2);
 
     console.log(`${r.path.length} moves. (${r.time.toFixed(2)} ms, (${nodesPerTick} n/t)). ${r.status}`);
+
+    if (fishermanState.isUsingViewer) {
+      const path = [fisherman.entity.position.offset(0, 0.5, 0)];
+
+      for (const node of r.path) {
+        path.push({ x: node.x, y: node.y + 0.5, z: node.z });
+      }
+      fisherman.viewer.drawLine('path', path, 0xff00ff);
+    }
   });
+
+  if (fishermanState.isUsingViewer) {
+    const port = parseInt(viewer_port);
+
+    require('prismarine-viewer').mineflayer(fisherman, {
+      port,
+      viewDistance: 6,
+    });
+
+    fisherman.viewer.on('blockClicked', (block, face, button) => {
+      if (button !== 2) return;
+
+      const p = block.position.offset(0, 1, 0);
+      moveToGoal({ x: p.x, y: p.y, z: p.z });
+    });
+  }
 });
