@@ -7,6 +7,8 @@ const DEBUG = true;
 
 const [_, __, botPrefix, host, port, username, viewer_port] = process.argv;
 
+process.title = `${username} connected to ${host}:${port} | ${botPrefix}`;
+
 const globalPrefix = '!all';
 
 /**
@@ -48,6 +50,8 @@ const fishermanState = {
   shouldFish: false,
 };
 
+let collectItemTimeout = null;
+
 fisherman.loadPlugin(pathfinder);
 
 fisherman.once('spawn', () => {
@@ -78,9 +82,12 @@ fisherman.once('spawn', () => {
   ];
   const goToSleep = async () => {
     if (!fisherman.time.isDay && !fisherman.isSleeping) {
+      await stopFishing(true);
+
       const bedBlocks = fisherman.findBlocks({
         matching: bedTypes.map((bedName) => mcData.blocksByName[bedName].id),
         count: 10,
+        maxDistance: 8,
       });
 
       let i = 0;
@@ -98,6 +105,7 @@ fisherman.once('spawn', () => {
       };
 
       const handleGoToBed = async () => {
+        fisherman.removeListener('goal_reached', handleGoToBed);
         try {
           await fisherman.sleep(bedBlock);
           fisherman.isSleeping = true;
@@ -107,8 +115,6 @@ fisherman.once('spawn', () => {
           console.log(error.message);
           i++;
           goToBed();
-        } finally {
-          fisherman.removeListener('goal_reached', handleGoToBed);
         }
       };
 
@@ -134,7 +140,9 @@ fisherman.once('spawn', () => {
     fisherman.chat('Rise and shine! Time to go fishing!');
 
     if (fishermanState.shouldFish) {
-      startFishing();
+      setTimeout(() => {
+        startFishing();
+      }, 500);
     }
   };
 
@@ -152,10 +160,12 @@ fisherman.once('spawn', () => {
 
       if (!fishermanState.isFishing) {
         fisherman.removeListener('playerCollect', onCollectHandler);
+        clearTimeout(collectItemTimeout);
 
         const { itemId } = entity.metadata[entity.metadata.length - 1];
 
         fisherman.chat(`I caught a ${mcData.items[itemId].displayName}!`);
+
         startFishing();
       }
     }
@@ -239,25 +249,38 @@ fisherman.once('spawn', () => {
 
         fishermanState.shouldFish = true;
         fishermanState.isFishing = true;
-        fisherman
-          .fish()
-          .then(() => {
-            fishermanState.isFishing = false;
-            fisherman.on('playerCollect', onCollectHandler);
 
-            if (DEBUG) {
-              console.log('playerCollectListener');
-            }
-          })
-          .catch(() => {
-            fisherman.removeListener('playerCollect', onCollectHandler);
+        setTimeout(() => {
+          fisherman
+            .fish()
+            .then(() => {
+              fishermanState.isFishing = false;
+              fisherman.on('playerCollect', onCollectHandler);
 
-            if (DEBUG) {
-              console.log('Removed playerCollectListener');
-            }
+              collectItemTimeout = setTimeout(() => {
+                fisherman.removeListener('playerCollect', onCollectHandler);
 
-            console.log('Fishing cancelled');
-          });
+                fisherman.chat(
+                  "I didn't seem to catch anything even though I reeled in... Try moving me to another spot."
+                );
+
+                startFishing();
+              }, 2000);
+
+              if (DEBUG) {
+                console.log('playerCollectListener');
+              }
+            })
+            .catch(() => {
+              fisherman.removeListener('playerCollect', onCollectHandler);
+
+              if (DEBUG) {
+                console.log('Removed playerCollectListener');
+              }
+
+              console.log('Fishing cancelled');
+            });
+        }, 100);
       };
 
       fisherman.on('goal_reached', sf_afterReach);
@@ -367,14 +390,14 @@ fisherman.once('spawn', () => {
             [0, -1],
             [1, -1],
           ].reduce((prev, curr, ix) => {
-            const blockType = fisherman.blockAt(block.position.offset(curr[0], 1, curr[1])).type;
+            const blockType = fisherman.blockAt(block.position.offset(curr[0], 0, curr[1])).type;
             return (
               prev || (blockType !== mcData.blocksByName['air'].id && blockType !== mcData.blocksByName['water'].id)
             );
           }, false)
         );
       },
-      maxDistance: 32,
+      maxDistance: 16,
     });
 
     if (!waterBlock) {
@@ -391,6 +414,7 @@ fisherman.once('spawn', () => {
         block.type !== mcData.blocksByName['air'].id &&
         fisherman.blockAt(block.position.offset(0, 1, 0)).type === mcData.blocksByName['air'].id,
       maxDistance: 16,
+      count: 4096,
     });
 
     if (!groundBlock) {
