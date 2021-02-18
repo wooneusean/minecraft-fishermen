@@ -305,14 +305,16 @@ fisherman.once('spawn', () => {
     return;
   };
 
-  const storeCatches = async () => {
+  const storeCatches = async (args) => {
     if (DEBUG) {
       console.log({ method: 'storeCatches', state: fishermanState });
     }
 
+    const storeAll = args[0] ? (args[0] === 'all' ? true : false) : false;
+
     const listOfTransferrableItems = [];
     for (const item of fisherman.inventory.items()) {
-      if (item.type !== 684) {
+      if (item.type !== 684 || storeAll) {
         listOfTransferrableItems.push(item);
       }
     }
@@ -322,7 +324,7 @@ fisherman.once('spawn', () => {
       return;
     }
 
-    await stopFishing(true);
+    await stopFishing(!storeAll);
 
     const chestToOpen = fisherman.findBlock({
       matching: mcData.blocksByName['chest'].id,
@@ -344,7 +346,7 @@ fisherman.once('spawn', () => {
       let totalItemsStored = 0;
 
       for (let item of listOfTransferrableItems) {
-        if (item.type !== 684) {
+        if (item.type !== 684 || storeAll) {
           try {
             totalItemsStored += item.count;
             await chest.deposit(item.type, null, item.count);
@@ -426,6 +428,42 @@ fisherman.once('spawn', () => {
 
     return { waterBlock, groundBlock };
   };
+
+  const goTo = (args, commander) => {
+    if (args.length === 1) {
+      let targetUsername = args[0].replace(/"/g, '');
+
+      if (targetUsername === fisherman.username) return;
+
+      if (args[0] === 'me') {
+        targetUsername = commander;
+      }
+
+      const target = getPlayerEntity(targetUsername);
+
+      if (!target) {
+        fisherman.chat(`Can't find anyone with the name ${targetUsername}`);
+        return;
+      }
+
+      const { x, y, z } = target.position;
+
+      fisherman.chat(`Im going to ${target.username}!`);
+
+      moveToGoal({ x, y, z }, 'near');
+    } else if (args.length === 3) {
+      const [x, y, z] = args;
+
+      fisherman.chat(`Im going to ${x}, ${y}, ${z}!`);
+
+      moveToGoal({ x, y, z }, 'near');
+    } else {
+      fisherman.chat("I don't understand!");
+    }
+
+    fisherman.on('goal_reached', reachedHandler);
+  };
+
   /**
    * ASYNC COMMANDS END
    */
@@ -466,41 +504,13 @@ fisherman.once('spawn', () => {
         goNearWater();
         break;
       case 'goto':
-        if (args.length === 1) {
-          let targetUsername = args[0].replace(/"/g, '');
-
-          if (targetUsername === fisherman.username) return;
-
-          if (args[0] === 'me') {
-            targetUsername = commander;
-          }
-
-          const target = getPlayerEntity(targetUsername);
-
-          if (!target) {
-            fisherman.chat(`Can't find anyone with the name ${targetUsername}`);
-            return;
-          }
-
-          const { x, y, z } = target.position;
-
-          fisherman.chat(`Im going to ${target.username}!`);
-
-          moveToGoal({ x, y, z }, 'near');
-        } else if (args.length === 3) {
-          const [x, y, z] = args;
-
-          fisherman.chat(`Im going to ${x}, ${y}, ${z}!`);
-
-          moveToGoal({ x, y, z }, 'near');
-        } else {
-          fisherman.chat("I don't understand!");
-        }
-
-        fisherman.on('goal_reached', reachedHandler);
+        goTo(args, commander);
         break;
       case 'store':
-        storeCatches();
+        storeCatches(args);
+        break;
+      case 'rc':
+        fisherman.activateItem();
         break;
       default:
         break;
