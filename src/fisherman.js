@@ -238,7 +238,7 @@ fisherman.once('spawn', () => {
       const sf_afterReach = async () => {
         fisherman.removeListener('goal_reached', sf_afterReach);
 
-        await fisherman.lookAt(waterBlock.position.offset(0.5, 1, 0.5), true);
+        await fisherman.lookAt(waterBlock.position.offset(0.5, 2.75, 0.5), true);
 
         try {
           await fisherman.equip(mcData.itemsByName.fishing_rod.id, 'hand');
@@ -293,6 +293,8 @@ fisherman.once('spawn', () => {
     }
 
     fisherman.removeListener('playerCollect', onCollectHandler);
+
+    clearTimeout(collectItemTimeout);
 
     if (fishermanState.isFishing) {
       fisherman.activateItem();
