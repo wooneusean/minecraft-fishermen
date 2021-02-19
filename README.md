@@ -14,7 +14,7 @@ Minecraft fishing bot made using [Mineflayer](https://github.com/PrismarineJS/mi
 
 To start the bot, the bot must be run with these arguments:
 
-`node fisherman.js <prefix> <host> <port> <name> [<password>] [<viewer>] [<viewer_port>]`
+`node fisherman.js <prefix> <host> <port> <name> [<password>] [<viewer_port>]`
 
 `prefix`: the prefix to call your bot.
 
@@ -26,27 +26,17 @@ To start the bot, the bot must be run with these arguments:
 
 `password`(optional): optional if joining a offline-mode server. Password to the minecraft account.
 
-`viewer`(optional): `true` if you want to have a viewer for your bot. Provides a right-click move functionality to your bot.
-
-`viewer_port`(optional): Port for the viewer. Defaults to 3000.
+`viewer_port`(optional): Port for the viewer. If unset, viewer won't start.
 
 ## Commands
-
-### goto
-
-```
-<prefix> goto <player>|<x y z>
-```
-
-`<player>` can be a player name or `me` if you want the bot to go to you.
 
 ### start
 
 ```
-<prefix> start
+<prefix> start <y_offset>
 ```
 
-Goes to the closest body of water and starts fishing.
+Goes to the closest body of water and starts fishing. `<y_offset>` determines how high the fishermen will aim from the initial water block coordinates.
 
 ### stop
 
@@ -56,13 +46,61 @@ Goes to the closest body of water and starts fishing.
 
 Stops fishing.
 
+### sleep
+
+```
+<prefix> sleep
+```
+
+Tries to force the fishermen to sleep. They usually sleep automatically.
+
+### nearwater
+
+```
+<prefix> nearwater
+```
+
+Makes the fishermen go near water. Nothing more, nothing less.
+
+### goto
+
+```
+<prefix> goto <player>|<x y z>
+```
+
+`<player>` can be a player name or `me` if you want the bot to go to you.
+
 ### store
 
 ```
-<prefix> store
+<prefix> store [all]
 ```
 
-Goes to the closest chest and stores the items fished.
+Goes to the closest chest and stores the items fished. Add `all` argument to store even the fishing rods.
+
+### follow
+
+```
+<prefix> follow <player>
+```
+
+Specifies `<player>` to follow.
+
+### unfollow
+
+```
+<prefix> unfollow
+```
+
+Unfollows players.
+
+### rc
+
+```
+<prefix> rc
+```
+
+Makes the fishermen perform a right click.
 
 ## Images
 
