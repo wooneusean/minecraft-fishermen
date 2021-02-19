@@ -3,13 +3,23 @@ if (process.argv.length < 6 || process.argv.length > 7) {
   process.exit(1);
 }
 
-const DEBUG = true;
+const DEBUG = false;
 
 const [_, __, botPrefix, host, port, username, viewer_port] = process.argv;
 
 process.title = `${username} connected to ${host}:${port} | ${botPrefix}`;
 
 const globalPrefix = '!all';
+
+/**
+ * Serverline
+ */
+
+const sl = require('serverline');
+
+sl.init();
+
+sl.setCompletion('start stop sleep nearwater goto store follow unfollow rc'.split(' '));
 
 /**
  * Mineflayer declarations
@@ -22,10 +32,37 @@ const { GoalBlock, GoalNear, GoalFollow } = require('mineflayer-pathfinder').goa
 /**
  * UTILITY DECLARATIONS START
  */
-const getArguments = (command, username, prefix) => {
-  const args = command.substr(prefix.length).match(/(".*?"|[^"\s]+)(?=\s*|\s*$)/g);
 
-  if (!args) throw new Error('Empty arguments');
+const getTime = (time = new Date()) => {
+  let hr = time.getHours().toString();
+  let min = time.getMinutes().toString();
+  let sec = time.getSeconds().toString();
+
+  if (hr.length <= 1) {
+    hr = '0' + hr;
+  }
+
+  if (min.length <= 1) {
+    min = '0' + min;
+  }
+
+  if (sec.length <= 1) {
+    sec = '0' + sec;
+  }
+
+  return `${hr}:${min}:${sec}`;
+};
+
+const cLog = (msg, sender = 'INFO') => {
+  console.log(`[${getTime()}] [${sender}] ${msg}`);
+};
+
+const getArguments = (command, username) => {
+  const args = command.toLowerCase().match(/(".*?"|[^"\s]+)(?=\s*|\s*$)/g);
+
+  if (!args) {
+    throw new Error('Command failed to be parsed.');
+  }
 
   const returnVal = { keyword: args[0], info: { commander: username, args: args.slice(1) } };
 
@@ -55,80 +92,10 @@ let collectItemTimeout = null;
 fisherman.loadPlugin(pathfinder);
 
 fisherman.once('spawn', () => {
+  cLog(`${username} connected to ${host}:${port}`);
+
   const mcData = require('minecraft-data')(fisherman.version);
   const defaultMove = new Movements(fisherman, mcData);
-
-  // #region LOOPS
-  /**
-   * LOOPS START
-   */
-  const bedTypes = [
-    'white_bed',
-    'orange_bed',
-    'magenta_bed',
-    'light_blue_bed',
-    'yellow_bed',
-    'lime_bed',
-    'pink_bed',
-    'gray_bed',
-    'light_gray_bed',
-    'cyan_bed',
-    'purple_bed',
-    'blue_bed',
-    'brown_bed',
-    'green_bed',
-    'red_bed',
-    'black_bed',
-  ];
-  const goToSleep = async () => {
-    if (!fisherman.time.isDay && !fisherman.isSleeping) {
-      await stopFishing(true);
-
-      const bedBlocks = fisherman.findBlocks({
-        matching: bedTypes.map((bedName) => mcData.blocksByName[bedName].id),
-        count: 10,
-        maxDistance: 8,
-      });
-
-      let i = 0;
-      let bedBlock = null;
-
-      const goToBed = async () => {
-        if (i > bedBlocks.length - 1) {
-          fisherman.chat("I can't find a suitable bed!");
-          return;
-        }
-
-        bedBlock = fisherman.blockAt(bedBlocks[i]);
-        moveToGoal(bedBlock.position, 'near');
-        fisherman.on('goal_reached', handleGoToBed);
-      };
-
-      const handleGoToBed = async () => {
-        fisherman.removeListener('goal_reached', handleGoToBed);
-        try {
-          await fisherman.sleep(bedBlock);
-          fisherman.isSleeping = true;
-          fisherman.chat("It's night! I'm going to sleep!");
-          fisherman.on('wake', afterAwakeHandler);
-        } catch (error) {
-          console.log(error.message);
-          i++;
-          goToBed();
-        }
-      };
-
-      goToBed();
-    }
-  };
-
-  setInterval(() => {
-    goToSleep();
-  }, 5000);
-  /**
-   * LOOPS END
-   */
-  // #endregion
 
   // #region LISTENER HANDLERS
   /**
@@ -208,12 +175,18 @@ fisherman.once('spawn', () => {
       goal = new GoalBlock(target.x, target.y, target.z);
     } else if (type === 'near') {
       goal = new GoalNear(target.x, target.y, target.z, radius);
+    } else if (type === 'follow') {
+      fisherman.pathfinder.setGoal(new GoalFollow(target, radius), true);
+      return;
+    } else if (type === 'stop') {
+      goal = null;
     } else {
       goal = null;
     }
 
     fisherman.pathfinder.setGoal(goal);
   };
+
   /**
    * HELPER COMMANDS END
    */
@@ -223,12 +196,87 @@ fisherman.once('spawn', () => {
   /**
    * ASYNC COMMANDS START
    */
+
+  const bedTypes = [
+    'white_bed',
+    'orange_bed',
+    'magenta_bed',
+    'light_blue_bed',
+    'yellow_bed',
+    'lime_bed',
+    'pink_bed',
+    'gray_bed',
+    'light_gray_bed',
+    'cyan_bed',
+    'purple_bed',
+    'blue_bed',
+    'brown_bed',
+    'green_bed',
+    'red_bed',
+    'black_bed',
+  ];
+  const goToSleep = async () => {
+    if (DEBUG) {
+      console.log({ method: 'goToSleep', state: fishermanState });
+    }
+
+    if (!fisherman.time.isDay && !fisherman.isSleeping) {
+      await stopFishing(true);
+
+      const bedBlocks = fisherman.findBlocks({
+        matching: bedTypes.map((bedName) => mcData.blocksByName[bedName].id),
+        count: 10,
+        maxDistance: 8,
+      });
+
+      let i = 0;
+      let bedBlock = null;
+
+      const goToBed = async () => {
+        if (i > bedBlocks.length - 1) {
+          fisherman.chat("I can't find a suitable bed!");
+          return;
+        }
+
+        bedBlock = fisherman.blockAt(bedBlocks[i]);
+        moveToGoal(bedBlock.position, 'near');
+        fisherman.on('goal_reached', handleGoToBed);
+      };
+
+      const handleGoToBed = async () => {
+        fisherman.removeListener('goal_reached', handleGoToBed);
+        try {
+          await fisherman.sleep(bedBlock);
+          fisherman.chat("It's night! I'm going to sleep!");
+          fisherman.on('wake', afterAwakeHandler);
+        } catch (error) {
+          // cLog(error);
+          console.error(error);
+          i++;
+          goToBed();
+        }
+      };
+
+      goToBed();
+    }
+  };
+
+  setInterval(() => {
+    goToSleep();
+  }, 5000);
+
   const startFishing = async () => {
     if (DEBUG) {
       console.log({ method: 'startFishing', state: fishermanState });
     }
 
     if (!fishermanState.isFishing) {
+      if (fisherman.inventory.emptySlotCount() <= 0) {
+        fisherman.chat('My inventory is full! Storing in the closest chest!');
+        storeCatches([]);
+        return;
+      }
+
       const { waterBlock, groundBlock } = await getFishingSpot();
 
       if (!waterBlock || !groundBlock) return;
@@ -238,12 +286,12 @@ fisherman.once('spawn', () => {
       const sf_afterReach = async () => {
         fisherman.removeListener('goal_reached', sf_afterReach);
 
-        await fisherman.lookAt(waterBlock.position.offset(0.5, 2.75, 0.5), true);
+        await fisherman.lookAt(waterBlock.position.offset(0.5, 1, 0.5), true);
 
         try {
           await fisherman.equip(mcData.itemsByName.fishing_rod.id, 'hand');
         } catch (error) {
-          fisherman.chat("I don't have a fishing rod!");
+          fisherman.chat(error.message);
           return;
         }
 
@@ -268,17 +316,17 @@ fisherman.once('spawn', () => {
               }, 2000);
 
               if (DEBUG) {
-                console.log('playerCollectListener');
+                cLog('playerCollectListener');
               }
             })
             .catch(() => {
               fisherman.removeListener('playerCollect', onCollectHandler);
 
               if (DEBUG) {
-                console.log('Removed playerCollectListener');
+                cLog('Removed playerCollectListener');
               }
 
-              console.log('Fishing cancelled');
+              cLog('Fishing cancelled');
             });
         }, 100);
       };
@@ -351,7 +399,8 @@ fisherman.once('spawn', () => {
             totalItemsStored += item.count;
             await chest.deposit(item.type, null, item.count);
           } catch (error) {
-            console.log(error.message);
+            // cLog(error);
+            console.error(error);
           }
         }
       }
@@ -464,12 +513,99 @@ fisherman.once('spawn', () => {
     fisherman.on('goal_reached', reachedHandler);
   };
 
+  const followPlayer = async (args, commander) => {
+    if (args.length === 1) {
+      let targetUsername = args[0].replace(/"/g, '');
+
+      if (targetUsername === fisherman.username) return;
+
+      if (args[0] === 'me') {
+        targetUsername = commander;
+      }
+
+      const target = getPlayerEntity(targetUsername);
+
+      if (!target) {
+        fisherman.chat(`Can't find anyone with the name ${targetUsername}`);
+        return;
+      }
+
+      fisherman.chat(`Im following ${target.username}!`);
+
+      moveToGoal(target, 'follow', 3);
+    } else {
+      fisherman.chat("I don't understand!");
+    }
+  };
+
   /**
    * ASYNC COMMANDS END
    */
   // #endregion
 
+  /**
+   * Accept input from command line
+   */
+  sl.on('line', (input) => {
+    if (!input) return;
+
+    let command;
+    try {
+      command = getArguments(input, username);
+    } catch (error) {
+      // cLog(error);
+      console.error(error);
+      return;
+    }
+
+    const keyword = command.keyword;
+    const args = command.info.args;
+    const commander = command.info.commander;
+
+    switch (keyword) {
+      case 'start':
+        startFishing();
+        cLog('Fishing started');
+        break;
+      case 'stop':
+        stopFishing();
+        cLog('Fishing stopped');
+        break;
+      case 'sleep':
+        goToSleep();
+        cLog('Trying to sleep');
+        break;
+      case 'nearwater':
+        goNearWater();
+        cLog('Trying to go near water');
+        break;
+      case 'goto':
+        goTo(args, commander);
+        break;
+      case 'store':
+        storeCatches(args);
+        break;
+      case 'follow':
+        followPlayer(args, commander);
+        break;
+      case 'unfollow':
+        moveToGoal(null, 'stop');
+        fisherman.chat('Stopped following.');
+        break;
+      case 'rc':
+        fisherman.activateItem();
+        break;
+      default:
+        break;
+    }
+  });
+
+  /**
+   * Accept input from chat
+   */
   fisherman.on('chat', function (username, message) {
+    cLog(message, username);
+
     if ((!message.startsWith(botPrefix) && !message.startsWith(globalPrefix)) || username === fisherman.username)
       return;
 
@@ -478,10 +614,13 @@ fisherman.once('spawn', () => {
       prefix = globalPrefix;
     }
 
+    message = message.trim().substr(prefix.length);
+
     let command;
     try {
-      command = getArguments(message, username, prefix);
+      command = getArguments(message, username);
     } catch (error) {
+      // cLog(error);
       console.log(error);
       return;
     }
@@ -509,12 +648,25 @@ fisherman.once('spawn', () => {
       case 'store':
         storeCatches(args);
         break;
+      case 'follow':
+        followPlayer(args, commander);
+        break;
+      case 'unfollow':
+        moveToGoal(null, 'stop');
+        fisherman.chat('Stopped following.');
+        break;
       case 'rc':
         fisherman.activateItem();
         break;
       default:
         break;
     }
+  });
+
+  fisherman.on('entityHurt', (entity) => {
+    if (entity !== fisherman.entity) return;
+
+    fisherman.chat("I'm being attacked! Help!!!");
   });
 
   fisherman.on('path_update', (r) => {
@@ -547,4 +699,9 @@ fisherman.once('spawn', () => {
       moveToGoal({ x: p.x, y: p.y, z: p.z });
     });
   }
+});
+
+fisherman.on('kicked', (reason) => {
+  cLog(`Kicked: ${reason}`);
+  process.exit(0);
 });
