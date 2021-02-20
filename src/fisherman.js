@@ -629,6 +629,10 @@ fisherman.once('spawn', () => {
         fisherman.activateItem();
         break;
       }
+      case 'say': {
+	const sayMsg = input.substr(keyword.length + 1).trim();
+	fisherman.chat(sayMsg);
+      }
       default:
         break;
     }
